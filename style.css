@@ -1,0 +1,39 @@
+* {
+  margin: 0;
+  padding: 0;
+  user-select: none;
+  font-size: 28px;
+  font-family: Consolas;
+}
+
+#container {
+  background-color: #00000011;
+  width: 100vw;
+  height: 100vh;
+  position: relative;
+  overflow: hidden;
+}
+
+#container .block {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  position: absolute;
+  border-style: solid;
+  box-sizing: border-box;
+}
+
+#container .block:hover span {
+  pointer-events: none;
+  filter: invert(100%);
+}
+
+#canvas {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  pointer-events: none;
+  z-index: 100;
+}
