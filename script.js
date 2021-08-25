@@ -50,7 +50,6 @@ function toSections(rect) {
     rotateByAxes({ x: rect.width / 2, y: rect.height / 2 }, rad),
     rotateByAxes({ x: -rect.width / 2, y: rect.height / 2 }, rad),
   ]
-  SHOW_POTENTIAL && rotated.forEach(item => setMarker(rect.x + item.x, rect.y + item.y));
   return rotated.map((point, i, arr) => ({
     x1: rect.x + point.x,
     y1: rect.y + point.y,
@@ -60,52 +59,56 @@ function toSections(rect) {
 }
 
 function isInside(sections, point) {
-  const D1 = (sections[0].x2 - sections[0].x1) * (point.y - sections[0].y1) - (point.x - sections[0].x1) * (sections[0].y2 - sections[0].y1);
-  const D2 = (sections[1].x2 - sections[1].x1) * (point.y - sections[1].y1) - (point.x - sections[1].x1) * (sections[1].y2 - sections[1].y1);
-  const D3 = (sections[2].x2 - sections[2].x1) * (point.y - sections[2].y1) - (point.x - sections[2].x1) * (sections[2].y2 - sections[2].y1);
-  const D4 = (sections[3].x2 - sections[3].x1) * (point.y - sections[3].y1) - (point.x - sections[3].x1) * (sections[3].y2 - sections[3].y1);
-  return (D1 >= 0 && D2 >= 0 && D3 >= 0 && D4 >= 0);
+  for (let i = 0; i < sections.length; i++) {
+    const D =
+      (sections[i].x2 - sections[i].x1) * (point.y - sections[i].y1) -
+      (point.x - sections[i].x1) * (sections[i].y2 - sections[i].y1);
+    if (D < 0) return false;
+  }
+  return true;
 }
 
-function getIntersections(rect) {
+function getIntersections(activeElement) {
   const intersections = [];
   const suspects = rects.filter(suspect => {
-    if (suspect.id === rect.id) return false;
-    const dist = getDistPoints(rect, suspect);
-    const targetDiag = getDiag(rect.width, rect.height);
+    if (suspect.id === activeElement.id) return false;
+    const dist = getDistPoints(activeElement, suspect);
+    const targetDiag = getDiag(activeElement.width, activeElement.height);
     const suspectDiag = getDiag(suspect.width, suspect.height);
     return targetDiag + suspectDiag >= dist * 2;
   })
   if (suspects.length === 0) return [];
-  const targetSections = toSections(rect);
-  targetSections.forEach((targetSection) => {
-    const a1 = targetSection.x2 - targetSection.x1;
-    const a2 = targetSection.y2 - targetSection.y1;
-    suspects.forEach(suspect => {
-      const suspectSections = toSections(suspect);
-      if (SHOW_ENTRIES && isInside(targetSections, suspect)) {
-        setMarker(suspect.x, suspect.y , '#0000FF');
-      } else if (isInside(suspectSections, rect)) {
-        setMarker(rect.x, rect.y , '#0000FF');
-      }
-      suspectSections.forEach((suspectSection) => {
-        const b1 = suspectSection.x2 - suspectSection.x1;
-        const b2 = suspectSection.y2 - suspectSection.y1;
+  const activeElementSections = toSections(activeElement);
+  for (let i = 0; i < activeElementSections.length; i++) {
+    const a1 = activeElementSections[i].x2 - activeElementSections[i].x1;
+    const a2 = activeElementSections[i].y2 - activeElementSections[i].y1;
+    for (let j = 0; j < suspects.length; j++) {
+      const suspectSections = toSections(suspects[j]);
+      if (SHOW_POTENTIAL) suspectSections.forEach(point => setMarker(point.x1, point.y1));
+      for (let k = 0; k < suspectSections.length; k++) {
+        const b1 = suspectSections[k].x2 - suspectSections[k].x1;
+        const b2 = suspectSections[k].y2 - suspectSections[k].y1;
         const div = a1 * b2 - a2 * b1;
-        if (div !== 0) {
-          const c1 = suspectSection.x1 - targetSection.x1;
-          const c2 = suspectSection.y1 - targetSection.y1;
-          const s = (c1 * b2 - c2 * b1) / div;
-          const t = (a1 * c2 - a2 * c1) / div;
-          if (s >= 0 && s <= 1 && t >= -1 && t <= 0) {
-            const posX = targetSection.x1 + s * (targetSection.x2 - targetSection.x1);
-            const posY = targetSection.y1 + s * (targetSection.y2 - targetSection.y1);
-            intersections.push({ x: posX, y: posY });
-          }
+        if (div === 0) continue;
+        const c1 = suspectSections[k].x1 - activeElementSections[i].x1;
+        const c2 = suspectSections[k].y1 - activeElementSections[i].y1;
+        const s = (c1 * b2 - c2 * b1) / div;
+        const t = (a1 * c2 - a2 * c1) / div;
+        if (s >= 0 && s <= 1 && t >= -1 && t <= 0) {
+          intersections.push({ 
+            x: activeElementSections[i].x1 + s * (activeElementSections[i].x2 - activeElementSections[i].x1), 
+            y: activeElementSections[i].y1 + s * (activeElementSections[i].y2 - activeElementSections[i].y1),
+          });
         }
-      })
-    })
-  })
+      }
+      if (!SHOW_ENTRIES) continue;
+      if (isInside(activeElementSections, suspects[j])) {
+        setMarker(suspects[j].x, suspects[j].y , '#0000FF');
+      } else if (isInside(suspectSections, activeElement)) {
+        setMarker(activeElement.x, activeElement.y , '#0000FF');
+      }
+    }
+  }
   return intersections;
 }
 
@@ -114,18 +117,21 @@ function clearCanvas() {
 }
 
 function enableMoving(e) {
-  if (!isMoving) {
-    const target = e.target;
-    if (target.className === 'block') {
-      active = target;
-      active.style.zIndex += 1;
-      prevPos = {
-        x: e.clientX,
-        y: e.clientY,
-      };
-    } else {
-      clearCanvas();
+  if (isMoving) return;
+  if (e.target.className === 'block') {
+    active = e.target;
+    active.style.zIndex += 1;
+    prevPos = {
+      x: e.clientX,
+      y: e.clientY,
+    };
+    const rect = rects[active.dataset.dataId];
+    if (SHOW_INTERSECTIONS) {
+      const intersections = getIntersections(rect);
+      intersections.forEach(point => setMarker(point.x, point.y, '#00FF00'));
     }
+  } else {
+    clearCanvas();
   }
 }
 
@@ -156,9 +162,9 @@ function disableMoving(e) {
     const shiftY = e.clientY - prevPos.y;
     rect.x += shiftX;
     rect.y += shiftY;
-    active.style.zIndex -= 1;  
+    active.style.zIndex -= 1;
+    active = null;
   }
-  active = null;
   prevPos = null;
 }
 
