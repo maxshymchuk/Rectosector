@@ -333,3 +333,4 @@ function init() {
 }
 
 window.onload = init;
+window.RECTOSECTOR.help;
