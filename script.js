@@ -1,15 +1,95 @@
-const BLOCKS_NUMBER = 120;
-const BLOCK_MIN_WIDTH = 40;
-const BLOCK_MAX_WIDTH = 300;
-const BLOCK_MIN_HEIGHT = 40;
-const BLOCK_MAX_HEIGHT = 300;
-const BLOCK_BORDER_WIDTH = 1;
-const MARKER_RADIUS = 4;
+let BLOCKS_NUMBER = 250;
+let BLOCK_MIN_WIDTH = 40;
+let BLOCK_MAX_WIDTH = 300;
+let BLOCK_MIN_HEIGHT = 40;
+let BLOCK_MAX_HEIGHT = 300;
+let BLOCK_BORDER_WIDTH = 1;
+let MARKER_RADIUS = 4;
+let SHOW_POTENTIAL = true;
+let SHOW_INTERSECTIONS = true;
+let SHOW_ENTRIES = true;
+let SHOW_ID = false;
 
-const SHOW_POTENTIAL = true;
-const SHOW_INTERSECTIONS = true;
-const SHOW_ENTRIES = true;
-const SHOW_ID = false;
+function withInit(func) {
+  return new Proxy(func, { 
+    apply: (target, _, args) => { 
+      const result = target(...args); 
+      init(); 
+      return result;
+    }
+  });
+}
+
+function withHelp(object) {
+  return new Proxy(object, { 
+    get: (target, prop) => { 
+      if (prop === 'help') {
+        console.log('Help: window.RECTOSECTOR.help')
+        console.log('Available commands:')
+        Object.keys(target).forEach(key => console.log(`\t${target[key].help}`));
+        console.log('Example: window.RECTOSECTOR.setNumber(100)')
+      } else {
+        return target[prop].func;
+      }
+    }
+  });
+}
+
+function between(value, min, max) {
+  if (isNaN(value)) return null;
+  if (value < min) return min;
+  if (value > max) return max;
+  return value;
+}
+
+const RECTOSECTOR = {
+  setNumber: {
+    help: 'setNumber(number = [0 - 50_000]) - number of rectangles on the screen',
+    func: withInit(value => BLOCKS_NUMBER = between(value, 0, 50_000) ?? BLOCKS_NUMBER)
+  },
+  setMinWidth: {
+    help: `setMinWidth(number = [0 - ${BLOCK_MAX_WIDTH}]) - min size of one of dimension of a rectangle`,
+    func: withInit(value => BLOCK_MIN_WIDTH = between(value, 0, BLOCK_MAX_WIDTH) ?? BLOCK_MIN_WIDTH),
+  },
+  setMaxWidth: {
+    help: `setMaxWidth(number = [${BLOCK_MIN_WIDTH} - 1000]) - max size of one of dimension of a rectangle`,
+    func: withInit(value => BLOCK_MAX_WIDTH = between(value, BLOCK_MIN_WIDTH, 1000) ?? BLOCK_MAX_WIDTH),
+  },
+  setMinHeight: {
+    help: `setMinHeight(number = [0 - ${BLOCK_MAX_HEIGHT}]) - min size of one of dimension of a rectangle`,
+    func: withInit(value => BLOCK_MIN_HEIGHT = between(value, 0, BLOCK_MAX_HEIGHT) ?? BLOCK_MIN_HEIGHT),
+  },
+  setMaxHeight: {
+    help: `setMaxHeight(number = [${BLOCK_MIN_HEIGHT} - 1000]) - max size of one of dimension of a rectangle`,
+    func: withInit(value => BLOCK_MAX_HEIGHT = between(value, BLOCK_MIN_HEIGHT, 1000) ?? BLOCK_MAX_HEIGHT),
+  },
+  setBorderWidth: {
+    help: 'setBorderWidth(number = [0 - 10]) - width of a border of rectangles',
+    func: withInit(value => BLOCK_BORDER_WIDTH = between(value, 0, 10) ?? BLOCK_BORDER_WIDTH),
+  },
+  setMarkerRadius: {
+    help: 'setMarkerRadius(number = [0 - 10]) - radius of markers (dots) of intersections and other events',
+    func: withInit(value => MARKER_RADIUS = between(value, 0, 10) ?? MARKER_RADIUS),
+  },
+  setShowPotentials: {
+    help: 'setShowPotentials(boolean) - show red markers that shows nodes of potentially intersected rectangles',
+    func: withInit(value => SHOW_POTENTIAL = !!value),
+  },
+  setShowIntersections: {
+    help: 'setShowIntersections(boolean) - show green markers that shows nodes of intersected lines',
+    func: withInit(value => SHOW_INTERSECTIONS = !!value),
+  },
+  setShowEntries: {
+    help: 'setShowEntries(boolean) - show blue markers that shows centers of intersected rectangles',
+    func: withInit(value => SHOW_ENTRIES = !!value),
+  },
+  setShowIds: {
+    help: 'setShowIds(boolean) - show id (number) of a rectangle',
+    func: withInit(value => SHOW_ID = !!value)
+  }
+}
+
+window.RECTOSECTOR = withHelp(RECTOSECTOR);
 
 const section = document.getElementById('container');
 const sectionBounds = section.getBoundingClientRect();
@@ -19,21 +99,7 @@ const ctx = canvas.getContext('2d');
 let isMoving = false;
 let prevPos = null;
 let active = null;
-
-const rects = new Array(BLOCKS_NUMBER).fill(null).map((a, i) => {
-  const width = randInt(BLOCK_MIN_WIDTH, BLOCK_MAX_WIDTH);
-  const height = randInt(BLOCK_MIN_HEIGHT, BLOCK_MAX_HEIGHT);
-  const border = getDiag(width, height);
-  return {
-    id: i,
-    width,
-    height,
-    x: randInt(border, sectionBounds.width - border),
-    y: randInt(border, sectionBounds.height - border),
-    rotation: randInt(0, 359),
-    color: randColor(),
-  };
-});
+let rects = [];
 
 function setMarker(x, y, color = '#FF0000') {
   ctx.fillStyle = color;
@@ -205,15 +271,41 @@ function randColor() {
   return `rgb(${randInt(50, 220)}, ${randInt(50, 220)}, ${randInt(50, 220)})`;
 }
 
-window.onload = () => {
+function reset() {
+  isMoving = false;
+  prevPos = null;
+  active = null;
+  rects = [];
+}
+
+function init() {
+  
   ctx.canvas.width  = window.innerWidth;
   ctx.canvas.height = window.innerHeight;
+
+  clearCanvas();
+  reset();
 
   const divs = [];
 
   document.body.addEventListener('mousedown', enableMoving);
   document.body.addEventListener('mousemove', move);
   document.body.addEventListener('mouseup', disableMoving);
+
+  for (let i = 0; i < BLOCKS_NUMBER; i++) {
+    const width = randInt(BLOCK_MIN_WIDTH, BLOCK_MAX_WIDTH);
+    const height = randInt(BLOCK_MIN_HEIGHT, BLOCK_MAX_HEIGHT);
+    const border = getDiag(width, height);
+    rects.push({
+      id: i,
+      width,
+      height,
+      x: randInt(border, sectionBounds.width - border),
+      y: randInt(border, sectionBounds.height - border),
+      rotation: randInt(0, 359),
+      color: randColor(),
+    });
+  }
 
   for (let i = 0; i < rects.length; i++) {
     const div = document.createElement('div');
@@ -237,5 +329,7 @@ window.onload = () => {
     div.addEventListener('mouseleave', onLeave);
     divs.push(div);
   }
-  section.append(...divs);
+  section.replaceChildren(...divs);
 }
+
+window.onload = init;
